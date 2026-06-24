@@ -10,6 +10,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "npm run build && electron .",
     "test": "node --test test/*.test.cjs",
+    "test:electron": "npm run build && cross-env AI_BREAD_SMOKE_TEST=1 AI_BREAD_USER_DATA_DIR=runtime/electron-smoke electron .",
     "organize-data": "bash scripts/organize-dataset.sh",
     "verify-data": "node scripts/verify-dataset.cjs"
   },

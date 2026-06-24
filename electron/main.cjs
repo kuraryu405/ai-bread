@@ -7,6 +7,11 @@ const { PythonWorker, resolvePythonPath } = require('./python-worker.cjs');
 let mainWindow;
 let store;
 let worker;
+const isSmokeTest = process.env.AI_BREAD_SMOKE_TEST === '1';
+
+if (process.env.AI_BREAD_USER_DATA_DIR) {
+  app.setPath('userData', path.resolve(process.env.AI_BREAD_USER_DATA_DIR));
+}
 
 function projectPath(...parts) {
   return path.join(__dirname, '..', ...parts);
@@ -36,6 +41,7 @@ function createWindow() {
     height: 940,
     minWidth: 1100,
     minHeight: 720,
+    show: !isSmokeTest,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -48,6 +54,26 @@ function createWindow() {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(projectPath('dist', 'index.html'));
+  }
+
+  if (isSmokeTest) {
+    mainWindow.webContents.once('did-finish-load', async () => {
+      try {
+        const result = await mainWindow.webContents.executeJavaScript(`
+          Promise.all([window.aiBread.ai.status(), window.aiBread.pos.listProducts()])
+            .then(([status, products]) => ({
+              classes: status.classes.map(({ id, count }) => ({ id, count })),
+              productCount: products.length,
+              modelAvailable: status.model.available,
+            }))
+        `);
+        console.log(`AI_BREAD_SMOKE_RESULT=${JSON.stringify(result)}`);
+        app.quit();
+      } catch (error) {
+        console.error(`AI_BREAD_SMOKE_ERROR=${error.stack || error.message}`);
+        app.exit(1);
+      }
+    });
   }
 }
 

@@ -36,4 +36,5 @@ AI_BREAD_PYTHON="$HOME/miniconda3/envs/ai-bread/bin/python" npm run dev
 ```bash
 npm test
 npm run build
+npm run test:electron
 ```
