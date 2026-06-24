@@ -7,3 +7,5 @@ data/training/*
 data/evaluation/*
 !data/evaluation/.gitkeep
 runtime/
+__pycache__/
+*.py[cod]
