@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('aiBread', {
     status: () => ipcRenderer.invoke('ai:status'),
     train: () => ipcRenderer.invoke('ai:train'),
     predict: (imagePath) => ipcRenderer.invoke('ai:predict', imagePath),
+    predictMany: (imagePath) => ipcRenderer.invoke('ai:predict-many', imagePath),
     onEvent: (listener) => {
       const wrapped = (_event, payload) => listener(payload);
       ipcRenderer.on('ai:event', wrapped);

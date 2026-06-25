@@ -35,6 +35,17 @@ function emitWorkerEvent(payload) {
   mainWindow?.webContents.send('ai:event', payload);
 }
 
+function assertUserDataImagePath(imagePath) {
+  if (typeof imagePath !== 'string') {
+    throw new Error('判定画像の保存先が正しくありません。');
+  }
+  const userDataPath = path.resolve(app.getPath('userData'));
+  const resolvedImagePath = path.resolve(imagePath);
+  if (!resolvedImagePath.startsWith(`${userDataPath}${path.sep}`)) {
+    throw new Error('判定画像の保存先が正しくありません。');
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1420,
@@ -81,10 +92,12 @@ function setupIpc() {
   ipcMain.handle('ai:status', () => worker.request('status', runtimePaths()));
   ipcMain.handle('ai:train', () => worker.request('train', { ...runtimePaths(), epochs: 15 }));
   ipcMain.handle('ai:predict', (_event, imagePath) => {
-    if (typeof imagePath !== 'string' || !imagePath.startsWith(app.getPath('userData'))) {
-      throw new Error('判定画像の保存先が正しくありません。');
-    }
+    assertUserDataImagePath(imagePath);
     return worker.request('predict', { ...runtimePaths(), imagePath });
+  });
+  ipcMain.handle('ai:predict-many', (_event, imagePath) => {
+    assertUserDataImagePath(imagePath);
+    return worker.request('predict_many', { ...runtimePaths(), imagePath });
   });
 
   ipcMain.handle('capture:save', (_event, dataUrl) => {
