@@ -6,8 +6,6 @@
 
 ```bash
 npm install
-npm run organize-data
-npm run verify-data
 npm run dev
 ```
 
@@ -24,12 +22,20 @@ conda create -n ai-bread python=3.10 tensorflow=2.20.0
 AI_BREAD_PYTHON="$HOME/miniconda3/envs/ai-bread/bin/python" npm run dev
 ```
 
+pipで依存を入れる場合は次を実行します。
+
+```bash
+AI_BREAD_PYTHON="$HOME/miniconda3/envs/ai-bread/bin/python"
+"$AI_BREAD_PYTHON" -m pip install -r python/requirements.txt
+```
+
 ## データと学習
 
-- `npm run organize-data` は元データを変更せず、`data/training/` へ分類済みのコピーを置きます。
-- 学習対象はロール15枚、ツイスト15枚、カンパーニュ14枚です。カンパーニュは推奨15枚を下回るため、画面に警告を出しますが学習はできます。
+- 学習画像は `data/training/` に同梱済みです。クローン後は `npm install` と `npm run dev` でアプリを起動できます。
+- `npm run organize-data` は、このMac上の元データフォルダから `data/training/` へ分類済みコピーを作り直すメンテナンス用コマンドです。通常のクローン後実行には不要です。
+- 学習対象はブレッド、ツイスト、デニッシュ、ロール、バゲット、カンパーニュの6種類です。
 - 学習済みモデル、カメラ画像、SQLite会計DBはElectronのユーザーデータ領域に保存され、Gitには含めません。
-- 現在のモデルは3種類分類です。新しい種類のデータフォルダと価格を追加した後、全データで再学習してください。
+- 初回起動後、画面の「AIに学習させる」で同梱データから6種類モデルを作成します。
 
 ## 確認
 

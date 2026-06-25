@@ -2,10 +2,7 @@ node_modules/
 .DS_Store
 npm-debug.log*
 dist/
-data/training/*
-!data/training/.gitkeep
-data/evaluation/*
-!data/evaluation/.gitkeep
+models/
 runtime/
 __pycache__/
 *.py[cod]

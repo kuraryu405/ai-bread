@@ -2,7 +2,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..', 'data');
-const expectedMinimum = { roll: 15, twist: 15, campagne: 14 };
+const expectedMinimum = {
+  baguette: 15,
+  bread: 15,
+  campagne: 14,
+  danish: 15,
+  roll: 15,
+  twist: 15,
+};
 
 function imageCount(directory) {
   if (!fs.existsSync(directory)) return 0;
@@ -10,6 +17,18 @@ function imageCount(directory) {
 }
 
 let valid = true;
+const trainingRoot = path.join(root, 'training');
+const actualClasses = fs.existsSync(trainingRoot)
+  ? fs.readdirSync(trainingRoot).filter((entry) => fs.statSync(path.join(trainingRoot, entry)).isDirectory())
+  : [];
+
+for (const label of Object.keys(expectedMinimum)) {
+  if (!actualClasses.includes(label)) {
+    console.error(`${label} フォルダがありません。`);
+    valid = false;
+  }
+}
+
 for (const [label, minimum] of Object.entries(expectedMinimum)) {
   const count = imageCount(path.join(root, 'training', label));
   console.log(`${label}: ${count} 枚`);
