@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AiEvent, AiStatus, Prediction, Product, Receipt } from './electron';
+import type { AiEvent, AiStatus, MultiPrediction, MultiPredictionDetection, Product, Receipt } from './electron';
 
 const productNames: Record<string, string> = {
   bread: 'ブレッド',
@@ -11,6 +11,7 @@ const productNames: Record<string, string> = {
 };
 
 type CartLine = Product & { quantity: number };
+type DetectionCandidate = MultiPredictionDetection & { selectedLabel: string };
 
 function yen(amount: number) {
   return `${new Intl.NumberFormat('ja-JP').format(amount)}円`;
@@ -20,13 +21,21 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '予期しないエラーが発生しました。';
 }
 
+function topProbabilities(detection: MultiPredictionDetection) {
+  return detection.probabilities
+    .slice()
+    .sort((a, b) => b.probability - a.probability)
+    .slice(0, 3);
+}
+
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [status, setStatus] = useState<AiStatus | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [prediction, setPrediction] = useState<Prediction | null>(null);
+  const [multiPrediction, setMultiPrediction] = useState<MultiPrediction | null>(null);
+  const [detections, setDetections] = useState<DetectionCandidate[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [progress, setProgress] = useState<AiEvent | null>(null);
@@ -112,6 +121,8 @@ export default function App() {
     if (!videoRef.current || !cameraReady) return;
     setError(null);
     setReceipt(null);
+    setMultiPrediction(null);
+    setDetections([]);
     setPredicting(true);
     try {
       const video = videoRef.current;
@@ -122,8 +133,9 @@ export default function App() {
       const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
       setPreview(dataUrl);
       const imagePath = await window.aiBread.capture.save(dataUrl);
-      const result = await window.aiBread.ai.predict(imagePath);
-      setPrediction(result);
+      const result = await window.aiBread.ai.predictMany(imagePath);
+      setMultiPrediction(result);
+      setDetections(result.detections.map((detection) => ({ ...detection, selectedLabel: detection.label })));
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -131,20 +143,54 @@ export default function App() {
     }
   }
 
-  function addPredictionToCart() {
-    if (!prediction) return;
-    const product = productsById.get(prediction.label);
-    if (!product) {
-      setError(`「${prediction.label}」の価格マスタが見つかりません。`);
+  function removeDetection(detectionId: string) {
+    setDetections((current) => current.filter((detection) => detection.id !== detectionId));
+  }
+
+  function updateDetectionLabel(detectionId: string, label: string) {
+    setDetections((current) =>
+      current.map((detection) =>
+        detection.id === detectionId ? { ...detection, selectedLabel: label } : detection,
+      ),
+    );
+  }
+
+  function addDetectionsToCart() {
+    if (detections.length === 0) return;
+    const additions = new Map<string, number>();
+    const missingLabels = new Set<string>();
+
+    for (const detection of detections) {
+      if (!productsById.has(detection.selectedLabel)) {
+        missingLabels.add(detection.selectedLabel);
+        continue;
+      }
+      additions.set(detection.selectedLabel, (additions.get(detection.selectedLabel) ?? 0) + 1);
+    }
+
+    if (missingLabels.size > 0) {
+      setError(`価格マスタが見つからないパン種があります: ${Array.from(missingLabels).join(', ')}`);
       return;
     }
+
     setCart((current) => {
-      const existing = current.find((item) => item.id === product.id);
-      if (existing) {
-        return current.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+      let next = [...current];
+      for (const [productId, quantity] of additions) {
+        const product = productsById.get(productId);
+        if (!product) continue;
+        const existing = next.find((item) => item.id === productId);
+        if (existing) {
+          next = next.map((item) =>
+            item.id === productId ? { ...item, quantity: item.quantity + quantity } : item,
+          );
+        } else {
+          next = [...next, { ...product, quantity }];
+        }
       }
-      return [...current, { ...product, quantity: 1 }];
+      return next;
     });
+    setMultiPrediction(null);
+    setDetections([]);
   }
 
   function updateQuantity(productId: string, quantity: number) {
@@ -176,7 +222,7 @@ export default function App() {
         <div>
           <p className="eyebrow">LOCAL AI BAKERY POS</p>
           <h1>AIパンレジ</h1>
-          <p>手元の写真で学習し、カメラ判定から会計までをローカルで完結します。</p>
+          <p>イパーイ食べてネ</p>
         </div>
         <div className={`model-state ${modelReady ? 'ready' : 'idle'}`}>
           {modelReady ? '学習済みモデルを使用中' : 'モデル未学習'}
@@ -238,7 +284,7 @@ export default function App() {
           </div>
           <div className="camera-stage">
             <video ref={videoRef} muted playsInline />
-            {!cameraReady && <p>カメラを起動して、パンを1つ映してください。</p>}
+            {!cameraReady && <p>カメラを起動して、パンを複数映してください。</p>}
           </div>
           <div className="button-row">
             <button className="secondary" onClick={() => void startCamera()}>カメラ起動</button>
@@ -248,23 +294,70 @@ export default function App() {
             <button className="danger" onClick={stopCamera} disabled={!cameraReady}>カメラ停止</button>
           </div>
 
-          {prediction && (
+          {multiPrediction && preview && (
             <div className="prediction-result">
-              {preview && <img src={preview} alt="判定したパン" />}
+              <div className="prediction-preview">
+                <img src={preview} alt="判定したパン" />
+                {detections.map((detection, index) => (
+                  <div
+                    className="detection-box"
+                    key={detection.id}
+                    style={{
+                      left: `${(detection.box.x / multiPrediction.image.width) * 100}%`,
+                      top: `${(detection.box.y / multiPrediction.image.height) * 100}%`,
+                      width: `${(detection.box.width / multiPrediction.image.width) * 100}%`,
+                      height: `${(detection.box.height / multiPrediction.image.height) * 100}%`,
+                    }}
+                  >
+                    <span>{index + 1}</span>
+                  </div>
+                ))}
+              </div>
               <div className="prediction-copy">
                 <p>判定結果</p>
-                <h3>{productNames[prediction.label] ?? prediction.label}</h3>
-                <strong>確信度 {(prediction.confidence * 100).toFixed(1)}%</strong>
-                <div className="probabilities">
-                  {prediction.probabilities.map((item) => (
-                    <div className="probability" key={item.label}>
-                      <span>{productNames[item.label] ?? item.label}</span>
-                      <progress value={item.probability} max="1" />
-                      <small>{(item.probability * 100).toFixed(1)}%</small>
-                    </div>
+                <h3>{detections.length} 件の候補</h3>
+                {multiPrediction.fallback && (
+                  <p className="fallback-note">個別のパン領域を検出できなかったため、画像全体を1件として判定しました。</p>
+                )}
+                <div className="detection-list">
+                  {detections.length === 0 ? (
+                    <p className="empty compact">候補はすべて削除されました。</p>
+                  ) : detections.map((detection, index) => (
+                    <article className="detection-card" key={detection.id}>
+                      <div className="detection-card-heading">
+                        <strong>#{index + 1} {productNames[detection.label] ?? detection.label}</strong>
+                        <button className="link-danger" onClick={() => removeDetection(detection.id)}>削除</button>
+                      </div>
+                      <label>
+                        <span>カートに入れる商品</span>
+                        <select
+                          value={detection.selectedLabel}
+                          onChange={(event) => updateDetectionLabel(detection.id, event.target.value)}
+                        >
+                          {!productsById.has(detection.selectedLabel) && (
+                            <option value={detection.selectedLabel}>{productNames[detection.selectedLabel] ?? detection.selectedLabel}</option>
+                          )}
+                          {products.map((product) => (
+                            <option key={product.id} value={product.id}>{product.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <small>AI判定の確信度 {(detection.confidence * 100).toFixed(1)}%</small>
+                      <div className="probabilities">
+                        {topProbabilities(detection).map((item) => (
+                          <div className="probability" key={item.label}>
+                            <span>{productNames[item.label] ?? item.label}</span>
+                            <progress value={item.probability} max="1" />
+                            <small>{(item.probability * 100).toFixed(1)}%</small>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
                   ))}
                 </div>
-                <button className="primary add-button" onClick={addPredictionToCart}>カートに入れる</button>
+                <button className="primary add-button" onClick={addDetectionsToCart} disabled={detections.length === 0}>
+                  検出結果をまとめてカートに入れる
+                </button>
               </div>
             </div>
           )}

@@ -25,6 +25,24 @@ export type Prediction = {
   probabilities: Array<{ label: string; probability: number }>;
 };
 
+export type DetectionBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type MultiPredictionDetection = Prediction & {
+  id: string;
+  box: DetectionBox;
+};
+
+export type MultiPrediction = {
+  image: { width: number; height: number };
+  detections: MultiPredictionDetection[];
+  fallback: boolean;
+};
+
 export type Product = { id: string; name: string; priceYen: number };
 export type CartItemRequest = { productId: string; quantity: number };
 export type Receipt = {
@@ -57,6 +75,7 @@ declare global {
         status(): Promise<AiStatus>;
         train(): Promise<AiStatus>;
         predict(imagePath: string): Promise<Prediction>;
+        predictMany(imagePath: string): Promise<MultiPrediction>;
         onEvent(listener: (event: AiEvent) => void): () => void;
       };
       capture: { save(dataUrl: string): Promise<string> };
